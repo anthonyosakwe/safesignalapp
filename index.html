@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-<title>SafeSignal — Real-time Safety Reporting</title>
+<title>SafeSignal Mobile — Real-time Safety Reporting</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1254,15 +1254,9 @@
 <body>
 
 <div class="page-header">
-  <span class="badge"><span class="dot"></span> Live prototype · MVP demo</span>
+  <span class="badge"><span class="dot"></span> Mobile client · Live prototype</span>
   <h1>SafeSignal — report safely, <em>in seconds</em>.</h1>
-  <p>An interactive prototype for a real-time incident reporting app. Built around speed under stress, privacy by default, and actionable evidence.</p>
-</div>
-
-<div class="view-toggle">
-  <button id="tab-mobile" class="active" onclick="setView('mobile')">📱 Mobile App</button>
-  <button id="tab-admin" onclick="setView('admin')">🖥 Admin Dashboard</button>
-  <button id="tab-both" onclick="setView('both')">⊞ Side by side</button>
+  <p>The user-facing mobile app for SafeSignal. Reports submitted here sync to the SafeSignal Admin Dashboard.</p>
 </div>
 
 <div class="stage">
@@ -1494,45 +1488,10 @@
     </div>
   </div>
 
-  <!-- ============ ADMIN DASHBOARD ============ -->
-  <div class="admin" id="admin">
-    <div class="admin-header">
-      <div class="left">
-        <small>Safety Coordinator</small>
-        <h2>Incoming <em>reports</em></h2>
-      </div>
-      <div class="admin-stats">
-        <div class="stat"><div class="num" id="stat-new">3</div><div class="lbl">New</div></div>
-        <div class="stat"><div class="num">12</div><div class="lbl">This week</div></div>
-      </div>
-    </div>
-
-    <div class="admin-tabs">
-      <button class="admin-tab active" data-status="all" onclick="filterReports('all')">All <span class="count">5</span></button>
-      <button class="admin-tab" data-status="new" onclick="filterReports('new')">New <span class="count">3</span></button>
-      <button class="admin-tab" data-status="review" onclick="filterReports('review')">In review <span class="count">1</span></button>
-      <button class="admin-tab" data-status="actioned" onclick="filterReports('actioned')">Actioned <span class="count">1</span></button>
-    </div>
-
-    <div class="admin-list" id="admin-list">
-      <!-- populated by JS -->
-    </div>
-  </div>
 </div>
 
 <div class="footnote">
-  Click any report on the dashboard to view full details, media, and update status. Submit a report on the phone to see it appear on the dashboard.
-</div>
-
-<!-- DETAIL MODAL -->
-<div class="modal-backdrop" id="modal" onclick="closeModalIfBg(event)">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="modal-title">Report details</h3>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body" id="modal-body"></div>
-  </div>
+  Tap "Report an incident" to start. Anonymous mode is on by default — toggle off only if you want to attach your name. Reports sync to the Admin Dashboard in real time.
 </div>
 
 <script>
@@ -1607,8 +1566,6 @@
     },
   ];
 
-  let currentFilter = 'all';
-  let currentDetailId = null;
   let formState = {
     type: null,
     desc: '',
@@ -1620,25 +1577,6 @@
   let capturedLocation = null;
 
   // ============ NAVIGATION ============
-  function setView(view) {
-    const phone = document.getElementById('phone');
-    const admin = document.getElementById('admin');
-    document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
-    if (view === 'mobile') {
-      phone.classList.remove('hidden');
-      admin.classList.add('hidden');
-      document.getElementById('tab-mobile').classList.add('active');
-    } else if (view === 'admin') {
-      phone.classList.add('hidden');
-      admin.classList.remove('hidden');
-      document.getElementById('tab-admin').classList.add('active');
-    } else {
-      phone.classList.remove('hidden');
-      admin.classList.remove('hidden');
-      document.getElementById('tab-both').classList.add('active');
-    }
-  }
-
   function goTo(screenName) {
     document.querySelectorAll('.screen').forEach(s => {
       s.classList.remove('active');
@@ -1877,142 +1815,8 @@
       status: 'new',
     };
     reports.unshift(newReport);
-    renderReports();
-    updateStats();
 
     goTo('success');
-  }
-
-  // ============ ADMIN DASHBOARD ============
-  function renderReports() {
-    const list = document.getElementById('admin-list');
-    const filtered = currentFilter === 'all'
-      ? reports
-      : reports.filter(r => r.status === currentFilter);
-
-    if (filtered.length === 0) {
-      list.innerHTML = '<div style="padding:48px 24px;text-align:center;color:var(--muted);font-size:13px">No reports in this category.</div>';
-      return;
-    }
-
-    list.innerHTML = filtered.map(r => `
-      <div class="report-row ${r.status === 'new' ? 'new' : ''}" onclick="openDetail('${r.id}')">
-        ${r.hasMedia ? `<div class="report-thumb"></div>` : `<div class="report-thumb no-media">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-        </div>`}
-        <div class="report-info">
-          <div class="report-row-top">
-            <span class="report-type">${r.type}</span>
-            ${r.anonymous ? '<span class="anon-pill">Anon</span>' : ''}
-          </div>
-          <div class="report-desc">${escapeHtml(r.desc)}</div>
-          <div class="report-meta">
-            <span>${r.location}</span>
-            <span class="dot"></span>
-            <span>${r.timestamp}</span>
-            ${r.hasMedia ? `<span class="dot"></span><span>📎 ${r.mediaCount}</span>` : ''}
-          </div>
-        </div>
-        <span class="status-pill ${r.status}">${labelFor(r.status)}</span>
-      </div>
-    `).join('');
-  }
-
-  function labelFor(status) {
-    return { new: 'New', review: 'Review', actioned: 'Actioned', closed: 'Closed' }[status] || status;
-  }
-
-  function escapeHtml(s) {
-    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-
-  function filterReports(status) {
-    currentFilter = status;
-    document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-    document.querySelector(`.admin-tab[data-status="${status}"]`).classList.add('active');
-    renderReports();
-  }
-
-  function updateStats() {
-    const newCount = reports.filter(r => r.status === 'new').length;
-    const reviewCount = reports.filter(r => r.status === 'review').length;
-    const actionedCount = reports.filter(r => r.status === 'actioned').length;
-    document.getElementById('stat-new').textContent = newCount;
-    document.querySelector('.admin-tab[data-status="all"] .count').textContent = reports.length;
-    document.querySelector('.admin-tab[data-status="new"] .count').textContent = newCount;
-    document.querySelector('.admin-tab[data-status="review"] .count').textContent = reviewCount;
-    document.querySelector('.admin-tab[data-status="actioned"] .count').textContent = actionedCount;
-  }
-
-  // ============ DETAIL MODAL ============
-  function openDetail(id) {
-    const r = reports.find(x => x.id === id);
-    if (!r) return;
-    currentDetailId = id;
-
-    document.getElementById('modal-title').textContent = `${r.type} · ${r.id}`;
-
-    const mediaHtml = r.hasMedia
-      ? `<div class="modal-section">
-          <div class="label">Evidence (${r.mediaCount})</div>
-          <div class="modal-media">
-            ${Array.from({length: r.mediaCount}).map(() => `<img alt="evidence">`).join('')}
-          </div>
-        </div>`
-      : '';
-
-    document.getElementById('modal-body').innerHTML = `
-      <div class="modal-section">
-        <div class="label">Reporter</div>
-        <div class="value">${r.anonymous ? '🔒 Anonymous' : (r.reporter || 'Unknown')}</div>
-      </div>
-      <div class="modal-section">
-        <div class="label">Description</div>
-        <div class="value">${escapeHtml(r.desc)}</div>
-      </div>
-      <div class="modal-section">
-        <div class="label">Location</div>
-        <div class="value">${r.location}<br><span style="color:var(--muted);font-size:12px">${r.coords}</span></div>
-        <div class="map-preview">
-          <div class="map-pin">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 010-5 2.5 2.5 0 010 5z"/></svg>
-          </div>
-        </div>
-      </div>
-      <div class="modal-section">
-        <div class="label">Submitted</div>
-        <div class="value">${r.timestamp}</div>
-      </div>
-      ${mediaHtml}
-      <div class="modal-section">
-        <div class="label">Update status</div>
-        <div class="status-actions">
-          <button class="status-btn ${r.status === 'new' ? 'active' : ''}" onclick="setStatus('${r.id}','new')">New</button>
-          <button class="status-btn ${r.status === 'review' ? 'active' : ''}" onclick="setStatus('${r.id}','review')">In review</button>
-          <button class="status-btn ${r.status === 'actioned' ? 'active' : ''}" onclick="setStatus('${r.id}','actioned')">Actioned</button>
-          <button class="status-btn ${r.status === 'closed' ? 'active' : ''}" onclick="setStatus('${r.id}','closed')">Closed</button>
-        </div>
-      </div>
-    `;
-    document.getElementById('modal').classList.add('show');
-  }
-
-  function setStatus(id, status) {
-    const r = reports.find(x => x.id === id);
-    if (r) {
-      r.status = status;
-      renderReports();
-      updateStats();
-      openDetail(id); // refresh modal
-    }
-  }
-
-  function closeModal() {
-    document.getElementById('modal').classList.remove('show');
-    currentDetailId = null;
-  }
-  function closeModalIfBg(e) {
-    if (e.target.id === 'modal') closeModal();
   }
 
   // ============ CLOCK ============
@@ -2024,14 +1828,8 @@
   }
 
   // ============ INIT ============
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeModal();
-  });
-
   updateClock();
   setInterval(updateClock, 30000);
-  renderReports();
-  updateStats();
 </script>
 
 </body>
