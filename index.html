@@ -1372,7 +1372,7 @@
     <div class="diag-row"><span class="diag-key">Initial load</span><span class="diag-val" id="diag-load">waiting</span></div>
     <div class="diag-row"><span class="diag-key">Last submit</span><span class="diag-val" id="diag-submit">none yet</span></div>
     <div class="diag-row"><span class="diag-key">Last error</span><span class="diag-val" id="diag-err">none</span></div>
-    <div class="diag-row"><span class="diag-key">Build</span><span class="diag-val" id="diag-build">v2-diag-2026-05-01</span></div>
+    <div class="diag-row"><span class="diag-key">Build</span><span class="diag-val" id="diag-build">v3-cdn-race-fix-2026-05-01</span></div>
   </div>
 </div>
 <script>
@@ -1403,9 +1403,14 @@
       title.textContent = 'Diagnostics: starting…';
     }
   }
-  // Capture global errors so they show up in the panel
+  // Capture global errors so they show up in the panel.
+  // Filter out the bare "Script error." that browsers emit for any cross-origin
+  // script failure — the CDN fallback loader handles those properly itself,
+  // and surfacing them here just causes confusion when later CDNs succeed.
   window.addEventListener('error', (e) => {
-    setDiag('err', (e.message || 'unknown').slice(0, 80), 'bad');
+    const msg = e.message || 'unknown';
+    if (msg === 'Script error.' || msg === 'Script error') return;
+    setDiag('err', msg.slice(0, 80), 'bad');
     document.getElementById('diag-panel').classList.add('expanded');
   });
   window.addEventListener('unhandledrejection', (e) => {
@@ -1720,7 +1725,7 @@
 </div>
 
 <!-- Supabase SDK with multi-CDN fallback. Some networks (e.g. certain MTN routes) -->
-<!-- block specific CDNs — we try jsDelivr → esm.sh → unpkg → cdnjs in sequence. -->
+<!-- block specific CDNs — we try jsDelivr → unpkg → cdnjs in sequence. -->
 <script>
   (function() {
     const cdns = [
@@ -1729,6 +1734,30 @@
       'https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.0/supabase.min.js'
     ];
     let idx = 0;
+    function whenReadyInit() {
+      // initializeSupabase is defined in the main script at the bottom of the page.
+      // Poll for it (and DOMContentLoaded) so we can call it as soon as both
+      // the SDK and the page's own scripts have loaded.
+      const tryInit = () => {
+        if (typeof initializeSupabase === 'function' && window.supabase) {
+          // Clear any earlier transient error from a failed CDN attempt
+          if (typeof setDiag === 'function') {
+            setDiag('err', 'none');
+            setDiag('sdk', 'loaded ✓', 'good');
+          }
+          initializeSupabase();
+          return true;
+        }
+        return false;
+      };
+      if (tryInit()) return;
+      // Retry every 100ms for up to 8 seconds
+      let attempts = 0;
+      const iv = setInterval(() => {
+        attempts++;
+        if (tryInit() || attempts > 80) clearInterval(iv);
+      }, 100);
+    }
     function tryNext() {
       if (idx >= cdns.length) {
         console.error('All Supabase CDNs failed');
@@ -1744,11 +1773,7 @@
       s.async = false;
       s.onload = () => {
         console.log('✓ Supabase SDK loaded from', url);
-        if (typeof setDiag === 'function') {
-          setDiag('sdk', 'loaded ✓', 'good');
-        }
-        // Trigger init now that SDK is available
-        if (typeof initializeSupabase === 'function') initializeSupabase();
+        whenReadyInit();
       };
       s.onerror = () => {
         console.warn('✗ CDN failed:', url, '— trying next');
@@ -1793,9 +1818,9 @@
         }
         console.error('Supabase init error:', e);
       }
-    } else if (!window.supabase) {
-      if (typeof setDiag === 'function') setDiag('client', 'SDK missing ✗', 'bad');
     }
+    // If window.supabase is not yet available, the CDN loader will call us
+    // again when it finishes — so we silently no-op rather than marking an error.
   }
   
   async function loadReportsFromSupabase() {
