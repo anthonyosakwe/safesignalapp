@@ -1271,6 +1271,52 @@
 </head>
 <body>
 
+<!-- Tiny floating debug button — tap to see app state. Long-press to hide. -->
+<button id="debug-btn"
+  onclick="showDebugInfo()"
+  oncontextmenu="document.getElementById('debug-btn').style.display='none';return false;"
+  style="position:fixed;bottom:12px;right:12px;z-index:9999;width:36px;height:36px;border-radius:50%;border:1px solid rgba(217,79,58,0.3);background:rgba(14,26,43,0.85);color:#fff;font-size:14px;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 12px rgba(0,0,0,0.2);"
+  aria-label="Debug info">🔍</button>
+
+<script>
+  function showDebugInfo() {
+    const lines = [];
+    lines.push('=== SAFESIGNAL DEBUG ===');
+    lines.push('');
+    lines.push('SDK loaded: ' + (typeof window.supabase !== 'undefined' ? 'YES' : 'NO'));
+    if (typeof window.supabase !== 'undefined') {
+      lines.push('createClient fn: ' + (typeof window.supabase.createClient === 'function' ? 'YES' : 'NO'));
+      // Check if it's our stub by calling it
+      try {
+        const test = window.supabase.createClient('', '');
+        lines.push('Client type: ' + (test === null ? 'STUB (CDN failed)' : 'REAL'));
+      } catch(e) { lines.push('Client check error: ' + e.message); }
+    }
+    lines.push('');
+    lines.push('App state:');
+    lines.push('• supabase var: ' + (typeof supabase === 'undefined' ? 'undefined' : (supabase === null ? 'null' : 'CONNECTED')));
+    lines.push('• reports in memory: ' + (typeof reports !== 'undefined' ? reports.length : 'unknown'));
+    lines.push('• audio cached: ' + (typeof audioCache !== 'undefined' ? Object.keys(audioCache).length : 'unknown'));
+    lines.push('');
+    lines.push('Last submit: ' + (window._lastSubmitResult || 'no submit yet'));
+    lines.push('Last error: ' + (window._lastError || 'none'));
+    lines.push('');
+    lines.push('URL: ' + location.href);
+    lines.push('Online: ' + navigator.onLine);
+    alert(lines.join('\n'));
+  }
+  // Capture errors for the diagnostic
+  window.addEventListener('error', e => {
+    if (e.message && e.message !== 'Script error.') {
+      window._lastError = e.message.slice(0, 100);
+    }
+  });
+  window.addEventListener('unhandledrejection', e => {
+    const msg = (e.reason && (e.reason.message || e.reason.toString())) || 'promise rejection';
+    window._lastError = msg.slice(0, 100);
+  });
+</script>
+
 <div class="page-header">
   <span class="badge"><span class="dot"></span> Live prototype · MVP demo</span>
   <h1>SafeSignal — report safely, <em>in seconds</em>.</h1>
@@ -2256,21 +2302,27 @@
         const { error } = await supabase.from('reports').insert([reportForDB]);
         if (error) {
           console.error('Supabase insert error:', error);
+          window._lastSubmitResult = 'FAILED: ' + (error.message || error.code || 'unknown').slice(0, 60);
+          window._lastError = error.message || error.code || 'insert failed';
           // Insert failed — fall back to local-only so the demo still works
           insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
         } else {
           console.log('✓ Report submitted to Supabase');
+          window._lastSubmitResult = 'SUCCESS: ' + refId + ' → Supabase';
           // Stash the audio in a side-cache so the modal can play it back
           // even though we don't keep base64 in the in-memory reports list.
           if (audioBase64) audioCache[refId] = audioBase64;
         }
       } catch (err) {
         console.error('Supabase insert threw:', err);
+        window._lastSubmitResult = 'THREW: ' + (err.message || 'unknown').slice(0, 60);
+        window._lastError = err.message || 'insert threw';
         insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
       }
     } else {
       // Supabase not initialized (offline or CDN failed) — local-only
       console.warn('Supabase not initialized — inserting locally only.');
+      window._lastSubmitResult = 'LOCAL ONLY: supabase var is ' + (supabase === null ? 'null' : typeof supabase);
       insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
     }
 
