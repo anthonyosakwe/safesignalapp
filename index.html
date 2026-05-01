@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-<title>SafeSignal Mobile — Real-time Safety Reporting</title>
+<title>SafeSignal — Real-time Safety Reporting</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1192,6 +1192,24 @@
     border-radius: 12px;
     background: linear-gradient(135deg, #c8d3e0 0%, #8da4be 100%);
   }
+  .evidence-tile {
+    width: 100%;
+    aspect-ratio: 4/3;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #c8d3e0 0%, #8da4be 100%);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.9;
+  }
+  .evidence-tile svg { opacity: 0.9; }
   .map-preview {
     margin-top: 8px;
     height: 140px;
@@ -1254,9 +1272,15 @@
 <body>
 
 <div class="page-header">
-  <span class="badge"><span class="dot"></span> Mobile client · Live prototype</span>
+  <span class="badge"><span class="dot"></span> Live prototype · MVP demo</span>
   <h1>SafeSignal — report safely, <em>in seconds</em>.</h1>
-  <p>The user-facing mobile app for SafeSignal. Reports submitted here sync to the SafeSignal Admin Dashboard.</p>
+  <p>An interactive prototype for a real-time incident reporting app. Built around speed under stress, privacy by default, and actionable evidence.</p>
+</div>
+
+<div class="view-toggle">
+  <button id="tab-mobile" class="active" onclick="setView('mobile')">📱 Mobile App</button>
+  <button id="tab-admin" onclick="setView('admin')">🖥 Admin Dashboard</button>
+  <button id="tab-both" onclick="setView('both')">⊞ Side by side</button>
 </div>
 
 <div class="stage">
@@ -1431,7 +1455,7 @@
             <div class="media-section">
               <div class="media-label">
                 Add evidence
-                <small>Optional · up to 3 photos or 1 video</small>
+                <small>Optional · up to 3 photos, 1 video, or 1 audio</small>
               </div>
               <div class="media-grid">
                 <div class="media-slot" id="slot-1" onclick="toggleMedia(1)">
@@ -1443,6 +1467,19 @@
                 <div class="media-slot" id="slot-3" onclick="toggleMedia(3)">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
                 </div>
+                <div class="media-slot" id="slot-4" onclick="toggleAudio()">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                </div>
+              </div>
+
+              <!-- Audio Recorder (hidden by default) -->
+              <div id="audio-recorder" style="display: none; margin-top: 16px; padding: 16px; background: rgba(217, 79, 58, 0.05); border-radius: 12px; border: 1px solid rgba(217, 79, 58, 0.2);">
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                  <button type="button" id="record-btn" onclick="startAudioRecord()" style="flex: 1; padding: 10px; background: #d94f3a; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer;">🔴 Record</button>
+                  <button type="button" id="stop-btn" onclick="stopAudioRecord()" style="display: none; flex: 1; padding: 10px; background: #6b7689; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer;">⏹ Stop</button>
+                  <button type="button" id="play-btn" onclick="playAudioRecord()" style="display: none; flex: 1; padding: 10px; background: white; color: #0e1a2b; border: 1px solid #d9d3c5; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer;">▶ Play</button>
+                </div>
+                <div id="audio-timer" style="text-align: center; font-size: 12px; color: #6b7689;">0s / 30s</div>
               </div>
             </div>
 
@@ -1488,13 +1525,190 @@
     </div>
   </div>
 
+  <!-- ============ ADMIN DASHBOARD ============ -->
+  <div class="admin" id="admin">
+    <div class="admin-header">
+      <div class="left">
+        <small>Safety Coordinator</small>
+        <h2>Incoming <em>reports</em></h2>
+      </div>
+      <div class="admin-stats">
+        <div class="stat"><div class="num" id="stat-new">3</div><div class="lbl">New</div></div>
+        <div class="stat"><div class="num">12</div><div class="lbl">This week</div></div>
+      </div>
+    </div>
+
+    <div class="admin-tabs">
+      <button class="admin-tab active" data-status="all" onclick="filterReports('all')">All <span class="count">5</span></button>
+      <button class="admin-tab" data-status="new" onclick="filterReports('new')">New <span class="count">3</span></button>
+      <button class="admin-tab" data-status="review" onclick="filterReports('review')">In review <span class="count">1</span></button>
+      <button class="admin-tab" data-status="actioned" onclick="filterReports('actioned')">Actioned <span class="count">1</span></button>
+    </div>
+
+    <div class="admin-list" id="admin-list">
+      <!-- populated by JS -->
+    </div>
+  </div>
 </div>
 
 <div class="footnote">
-  Tap "Report an incident" to start. Anonymous mode is on by default — toggle off only if you want to attach your name. Reports sync to the Admin Dashboard in real time.
+  Click any report on the dashboard to view full details, media, and update status. Submit a report on the phone to see it appear on the dashboard.
 </div>
 
+<!-- DETAIL MODAL -->
+<div class="modal-backdrop" id="modal" onclick="closeModalIfBg(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Report details</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script async src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
+  // ============ SUPABASE INITIALIZATION ============
+  const SUPABASE_URL = 'https://sytopkeplbcivuelkoyd.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_8fRYYBYC2hREEDFTmIb7UQ_BnBH6NRg';
+  
+  let supabase = null;
+
+  // Maps report_ref -> base64 audio string. Populated by realtime INSERT,
+  // initial load, and local submit. Used by the admin modal for playback
+  // so we don't bloat every in-memory report object with full base64 blobs.
+  const audioCache = {};
+  
+  document.addEventListener('DOMContentLoaded', initializeSupabase);
+  setTimeout(initializeSupabase, 1000);
+  
+  async function initializeSupabase() {
+    if (window.supabase && !supabase) {
+      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      console.log('✓ Supabase initialized');
+      loadReportsFromSupabase();
+    }
+  }
+  
+  async function loadReportsFromSupabase() {
+    try {
+      if (!supabase) return;
+      const { data, error } = await supabase
+        .from('reports')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        const converted = data.map(r => {
+          // Cache audio for modal playback (don't carry base64 on every render)
+          if (r.audio && r.report_ref) audioCache[r.report_ref] = r.audio;
+          return {
+            id: r.report_ref || `SS-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+            type: r.incident_type ? r.incident_type.charAt(0).toUpperCase() + r.incident_type.slice(1) : 'Other',
+            typeKey: r.incident_type || 'other',
+            desc: r.description || '',
+            location: r.location_name || 'Unknown',
+            coords: r.coordinates || '—',
+            timestamp: formatTimeAgo(r.created_at),
+            anonymous: r.is_anonymous,
+            hasMedia: r.media_count > 0,
+            mediaCount: r.media_count || 0,
+            hasAudio: !!r.audio,
+            status: r.status || 'new',
+          };
+        });
+        // Real Supabase reports stack on TOP; the full mock baseline stays at the bottom.
+        // Dedup by id in case any mock id collides with a real report_ref.
+        const realIds = new Set(converted.map(r => r.id));
+        reports = [...converted, ...reports.filter(r => !realIds.has(r.id))];
+        renderReports();
+        updateStats();
+      }
+      
+      setupRealtimeListener();
+    } catch (err) {
+      console.error('Load reports error:', err);
+      // Even on error, still try to wire up realtime so future inserts work
+      setupRealtimeListener();
+    }
+  }
+  
+  function formatTimeAgo(isoString) {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diff = now - date;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
+  }
+  
+  function setupRealtimeListener() {
+    try {
+      if (!supabase) return;
+      supabase
+        .channel('reports_changes')
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'reports' },
+          (payload) => {
+            console.log('📡 Realtime update:', payload.eventType);
+            
+            if (payload.eventType === 'INSERT') {
+              const ref = payload.new.report_ref;
+              // Dedup: skip if this report is already in the list
+              if (reports.some(r => r.id === ref)) {
+                console.log('↪ Skipping duplicate INSERT for', ref);
+                return;
+              }
+              const newReport = {
+                id: ref,
+                type: payload.new.incident_type ? payload.new.incident_type.charAt(0).toUpperCase() + payload.new.incident_type.slice(1) : 'Other',
+                typeKey: payload.new.incident_type,
+                desc: payload.new.description,
+                location: payload.new.location_name,
+                coords: payload.new.coordinates,
+                timestamp: 'Just now',
+                anonymous: payload.new.is_anonymous,
+                hasMedia: payload.new.media_count > 0,
+                mediaCount: payload.new.media_count,
+                hasAudio: !!payload.new.audio,
+                status: payload.new.status,
+              };
+              // Cache audio base64 for modal playback
+              if (payload.new.audio) audioCache[ref] = payload.new.audio;
+              reports.unshift(newReport);
+              renderReports();
+              updateStats();
+            } else if (payload.eventType === 'UPDATE') {
+              const idx = reports.findIndex(r => r.id === payload.new.report_ref);
+              if (idx !== -1) {
+                reports[idx].status = payload.new.status;
+                renderReports();
+                updateStats();
+                // If the modal is open on this report, refresh it so the
+                // active status button updates without the user reopening it.
+                if (currentDetailId === payload.new.report_ref) {
+                  openDetail(currentDetailId);
+                }
+              }
+            }
+          })
+        .subscribe();
+      console.log('✓ Realtime subscription active');
+    } catch (err) {
+      console.error('Realtime setup error:', err);
+    }
+  }
+
   // ============ STATE ============
   let reports = [
     {
@@ -1566,10 +1780,12 @@
     },
   ];
 
+  let currentFilter = 'all';
+  let currentDetailId = null;
   let formState = {
     type: null,
     desc: '',
-    media: [false, false, false],
+    media: [false, false, false, false], // [photo1, photo2, video, audio]
     anonymous: true,
   };
 
@@ -1577,6 +1793,25 @@
   let capturedLocation = null;
 
   // ============ NAVIGATION ============
+  function setView(view) {
+    const phone = document.getElementById('phone');
+    const admin = document.getElementById('admin');
+    document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
+    if (view === 'mobile') {
+      phone.classList.remove('hidden');
+      admin.classList.add('hidden');
+      document.getElementById('tab-mobile').classList.add('active');
+    } else if (view === 'admin') {
+      phone.classList.add('hidden');
+      admin.classList.remove('hidden');
+      document.getElementById('tab-admin').classList.add('active');
+    } else {
+      phone.classList.remove('hidden');
+      admin.classList.remove('hidden');
+      document.getElementById('tab-both').classList.add('active');
+    }
+  }
+
   function goTo(screenName) {
     document.querySelectorAll('.screen').forEach(s => {
       s.classList.remove('active');
@@ -1584,7 +1819,7 @@
     document.getElementById('screen-' + screenName).classList.add('active');
     if (screenName === 'home') {
       // reset form — anonymous stays ON by default
-      formState = { type: null, desc: '', media: [false, false, false], anonymous: true };
+      formState = { type: null, desc: '', media: [false, false, false, false], anonymous: true };
       capturedLocation = null;
       document.querySelectorAll('.type-chip').forEach(c => c.classList.remove('selected'));
       document.getElementById('desc-input').value = '';
@@ -1593,6 +1828,8 @@
       document.getElementById('anon-confirm').classList.add('on');
       const manualEl = document.getElementById('manual-location');
       if (manualEl) manualEl.remove();
+      // Reset audio recorder state and UI
+      resetAudioRecorder();
       updateCharCount();
     }
     if (screenName === 'report') {
@@ -1775,7 +2012,141 @@
     formState.anonymous = sw.classList.contains('on');
   }
 
-  function submitReport() {
+  // ============ AUDIO RECORDING ============
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let recordingStartTime = null;
+  let recordingTimer = null;
+  let recordedAudio = null;
+  let lastAudioUrl = null; // tracked so we can revoke between plays
+
+  function toggleAudio() {
+    const recorder = document.getElementById('audio-recorder');
+    if (recorder.style.display === 'none') {
+      recorder.style.display = 'block';
+    } else {
+      recorder.style.display = 'none';
+    }
+  }
+
+  // Reset audio recorder back to its initial state (record-only, no recording present).
+  // Called on form reset and before each fresh recording so the UI never gets stuck.
+  function resetAudioRecorder() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      try { mediaRecorder.stop(); } catch (e) {}
+      try { mediaRecorder.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    }
+    if (recordingTimer) {
+      clearInterval(recordingTimer);
+      recordingTimer = null;
+    }
+    if (lastAudioUrl) {
+      URL.revokeObjectURL(lastAudioUrl);
+      lastAudioUrl = null;
+    }
+    mediaRecorder = null;
+    audioChunks = [];
+    recordingStartTime = null;
+    recordedAudio = null;
+
+    const recorder = document.getElementById('audio-recorder');
+    if (recorder) recorder.style.display = 'none';
+    const recBtn = document.getElementById('record-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const playBtn = document.getElementById('play-btn');
+    const timer = document.getElementById('audio-timer');
+    if (recBtn) recBtn.style.display = 'block';
+    if (stopBtn) stopBtn.style.display = 'none';
+    if (playBtn) playBtn.style.display = 'none';
+    if (timer) timer.textContent = '0s / 30s';
+  }
+
+  async function startAudioRecord() {
+    try {
+      // Clear any prior recording state so re-recording behaves cleanly
+      if (lastAudioUrl) {
+        URL.revokeObjectURL(lastAudioUrl);
+        lastAudioUrl = null;
+      }
+      recordedAudio = null;
+      audioChunks = [];
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+
+      mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        recordedAudio = new Blob(audioChunks, { type: 'audio/webm' });
+        formState.media[3] = true;  // Mark audio as added
+        document.getElementById('slot-4').classList.add('filled');
+      };
+
+      mediaRecorder.start();
+      recordingStartTime = Date.now();
+      recordingTimer = setInterval(updateAudioTimer, 100);
+
+      // Recording state: only Stop visible
+      document.getElementById('record-btn').style.display = 'none';
+      document.getElementById('stop-btn').style.display = 'block';
+      document.getElementById('play-btn').style.display = 'none';
+    } catch (err) {
+      alert('Microphone access denied');
+      console.error('Microphone error:', err);
+    }
+  }
+
+  function stopAudioRecord() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      clearInterval(recordingTimer);
+      recordingTimer = null;
+
+      // Stopped state: Record (re-record) and Play visible, Stop hidden
+      document.getElementById('record-btn').style.display = 'block';
+      document.getElementById('record-btn').textContent = '🔴 Re-record';
+      document.getElementById('stop-btn').style.display = 'none';
+      document.getElementById('play-btn').style.display = 'block';
+    }
+  }
+
+  function playAudioRecord() {
+    if (recordedAudio) {
+      // Revoke previous URL before creating a new one to avoid leaks
+      if (lastAudioUrl) URL.revokeObjectURL(lastAudioUrl);
+      lastAudioUrl = URL.createObjectURL(recordedAudio);
+      const audio = new Audio(lastAudioUrl);
+      audio.play();
+    }
+  }
+
+  function updateAudioTimer() {
+    if (recordingStartTime) {
+      const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+      document.getElementById('audio-timer').textContent = `${elapsed}s / 30s`;
+
+      if (elapsed >= 30) {
+        stopAudioRecord();
+      }
+    }
+  }
+
+  // Convert a Blob to a base64 string (without the data: prefix)
+  // Used to upload recorded audio to Supabase as a text column.
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result; // "data:audio/webm;base64,XXXX"
+        const base64 = typeof result === 'string' ? result.split(',')[1] : '';
+        resolve(base64);
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function submitReport() {
     if (!formState.type) {
       alert('Please select an incident type.');
       return;
@@ -1799,7 +2170,72 @@
     const locationLabel = capturedLocation ? capturedLocation.place : 'Location not captured';
     const coordsLabel = capturedLocation ? capturedLocation.coords : '—';
 
-    // Add to reports
+    // Disable submit + show working state
+    const submitBtn = document.getElementById('submit-btn');
+    const originalLabel = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = 'Submitting…';
+
+    // Convert audio Blob → base64 if present (the audio column is text in Supabase)
+    let audioBase64 = null;
+    if (recordedAudio) {
+      try {
+        audioBase64 = await blobToBase64(recordedAudio);
+      } catch (err) {
+        console.error('Audio encoding failed:', err);
+      }
+    }
+
+    // Prepare report for Supabase
+    const reportForDB = {
+      report_ref: refId,
+      incident_type: formState.type,
+      description: formState.desc || 'No description provided.',
+      location_name: locationLabel,
+      coordinates: coordsLabel,
+      latitude: capturedLocation ? capturedLocation.lat : null,
+      longitude: capturedLocation ? capturedLocation.lng : null,
+      is_anonymous: formState.anonymous,
+      media_count: mediaCount,
+      audio: audioBase64,
+      status: 'new',
+      created_at: new Date().toISOString()
+    };
+
+    // Insert to Supabase. If supabase is connected, realtime will echo it back
+    // and append it to the dashboard via setupRealtimeListener — no optimistic
+    // local insert needed (prevents duplicate rows).
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('reports').insert([reportForDB]);
+        if (error) {
+          console.error('Supabase insert error:', error);
+          // Insert failed — fall back to local-only so the demo still works
+          insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
+        } else {
+          console.log('✓ Report submitted to Supabase');
+          // Stash the audio in a side-cache so the modal can play it back
+          // even though we don't keep base64 in the in-memory reports list.
+          if (audioBase64) audioCache[refId] = audioBase64;
+        }
+      } catch (err) {
+        console.error('Supabase insert threw:', err);
+        insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
+      }
+    } else {
+      // Supabase not initialized (offline or CDN failed) — local-only
+      console.warn('Supabase not initialized — inserting locally only.');
+      insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
+    }
+
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalLabel;
+    goTo('success');
+  }
+
+  // Local-only fallback when Supabase isn't reachable.
+  // Mirrors the shape produced by the realtime listener.
+  function insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64) {
     const newReport = {
       id: refId,
       type: typeMap[formState.type],
@@ -1812,11 +2248,195 @@
       reporter: formState.anonymous ? null : 'You',
       hasMedia: mediaCount > 0,
       mediaCount,
+      hasAudio: !!audioBase64,
       status: 'new',
     };
+    if (audioBase64) audioCache[refId] = audioBase64;
+    // Insert above any existing real reports but above the mock baseline
     reports.unshift(newReport);
+    renderReports();
+    updateStats();
+  }
 
-    goTo('success');
+  // ============ ADMIN DASHBOARD ============
+  function renderReports() {
+    const list = document.getElementById('admin-list');
+    const filtered = currentFilter === 'all'
+      ? reports
+      : reports.filter(r => r.status === currentFilter);
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<div style="padding:48px 24px;text-align:center;color:var(--muted);font-size:13px">No reports in this category.</div>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(r => `
+      <div class="report-row ${r.status === 'new' ? 'new' : ''}" onclick="openDetail('${r.id}')">
+        ${r.hasMedia ? `<div class="report-thumb"></div>` : `<div class="report-thumb no-media">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        </div>`}
+        <div class="report-info">
+          <div class="report-row-top">
+            <span class="report-type">${r.type}</span>
+            ${r.anonymous ? '<span class="anon-pill">Anon</span>' : ''}
+          </div>
+          <div class="report-desc">${escapeHtml(r.desc)}</div>
+          <div class="report-meta">
+            <span>${r.location}</span>
+            <span class="dot"></span>
+            <span>${r.timestamp}</span>
+            ${r.hasMedia ? `<span class="dot"></span><span>📎 ${r.mediaCount}</span>` : ''}
+          </div>
+        </div>
+        <span class="status-pill ${r.status}">${labelFor(r.status)}</span>
+      </div>
+    `).join('');
+  }
+
+  function labelFor(status) {
+    return { new: 'New', review: 'Review', actioned: 'Actioned', closed: 'Closed' }[status] || status;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function filterReports(status) {
+    currentFilter = status;
+    document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector(`.admin-tab[data-status="${status}"]`).classList.add('active');
+    renderReports();
+  }
+
+  function updateStats() {
+    const newCount = reports.filter(r => r.status === 'new').length;
+    const reviewCount = reports.filter(r => r.status === 'review').length;
+    const actionedCount = reports.filter(r => r.status === 'actioned').length;
+    document.getElementById('stat-new').textContent = newCount;
+    document.querySelector('.admin-tab[data-status="all"] .count').textContent = reports.length;
+    document.querySelector('.admin-tab[data-status="new"] .count').textContent = newCount;
+    document.querySelector('.admin-tab[data-status="review"] .count').textContent = reviewCount;
+    document.querySelector('.admin-tab[data-status="actioned"] .count').textContent = actionedCount;
+  }
+
+  // ============ DETAIL MODAL ============
+  function openDetail(id) {
+    const r = reports.find(x => x.id === id);
+    if (!r) return;
+    currentDetailId = id;
+
+    document.getElementById('modal-title').textContent = `${r.type} · ${r.id}`;
+
+    // Styled evidence placeholders (we don't store actual photo/video bytes in MVP)
+    const mediaHtml = r.hasMedia
+      ? `<div class="modal-section">
+          <div class="label">Evidence (${r.mediaCount})</div>
+          <div class="modal-media">
+            ${Array.from({length: r.mediaCount}).map((_, i) => `
+              <div class="evidence-tile">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>Photo ${i + 1}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>`
+      : '';
+
+    // Audio playback section — only render if this report has audio
+    const cachedAudio = audioCache[r.id];
+    const audioHtml = (r.hasAudio && cachedAudio)
+      ? `<div class="modal-section">
+          <div class="label">Audio recording</div>
+          <audio controls preload="none" style="width:100%; margin-top:6px;" src="data:audio/webm;base64,${cachedAudio}"></audio>
+        </div>`
+      : (r.hasAudio
+        ? `<div class="modal-section">
+            <div class="label">Audio recording</div>
+            <div class="value" style="color:var(--muted); font-size:13px;">Audio attached but not loaded in this session.</div>
+          </div>`
+        : '');
+
+    document.getElementById('modal-body').innerHTML = `
+      <div class="modal-section">
+        <div class="label">Reporter</div>
+        <div class="value">${r.anonymous ? '🔒 Anonymous' : (r.reporter || 'Unknown')}</div>
+      </div>
+      <div class="modal-section">
+        <div class="label">Description</div>
+        <div class="value">${escapeHtml(r.desc)}</div>
+      </div>
+      <div class="modal-section">
+        <div class="label">Location</div>
+        <div class="value">${r.location}<br><span style="color:var(--muted);font-size:12px">${r.coords}</span></div>
+        <div class="map-preview">
+          <div class="map-pin">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 010-5 2.5 2.5 0 010 5z"/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="modal-section">
+        <div class="label">Submitted</div>
+        <div class="value">${r.timestamp}</div>
+      </div>
+      ${mediaHtml}
+      ${audioHtml}
+      <div class="modal-section">
+        <div class="label">Update status</div>
+        <div class="status-actions">
+          <button class="status-btn ${r.status === 'new' ? 'active' : ''}" onclick="setStatus('${r.id}','new')">New</button>
+          <button class="status-btn ${r.status === 'review' ? 'active' : ''}" onclick="setStatus('${r.id}','review')">In review</button>
+          <button class="status-btn ${r.status === 'actioned' ? 'active' : ''}" onclick="setStatus('${r.id}','actioned')">Actioned</button>
+          <button class="status-btn ${r.status === 'closed' ? 'active' : ''}" onclick="setStatus('${r.id}','closed')">Closed</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('modal').classList.add('show');
+  }
+
+  async function setStatus(id, status) {
+    const r = reports.find(x => x.id === id);
+    if (!r) return;
+
+    const previousStatus = r.status;
+    // Optimistic local update
+    r.status = status;
+    renderReports();
+    updateStats();
+    openDetail(id); // refresh modal
+
+    // Persist to Supabase (only for reports that exist there — mock reports won't)
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from('reports')
+          .update({ status })
+          .eq('report_ref', id);
+        if (error) {
+          console.error('Status update failed:', error);
+          // Revert on failure
+          r.status = previousStatus;
+          renderReports();
+          updateStats();
+          if (currentDetailId === id) openDetail(id);
+        } else {
+          console.log(`✓ Status updated to "${status}" for ${id}`);
+        }
+      } catch (err) {
+        console.error('Status update threw:', err);
+        r.status = previousStatus;
+        renderReports();
+        updateStats();
+        if (currentDetailId === id) openDetail(id);
+      }
+    }
+  }
+
+  function closeModal() {
+    document.getElementById('modal').classList.remove('show');
+    currentDetailId = null;
+  }
+  function closeModalIfBg(e) {
+    if (e.target.id === 'modal') closeModal();
   }
 
   // ============ CLOCK ============
@@ -1828,8 +2448,14 @@
   }
 
   // ============ INIT ============
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
+  });
+
   updateClock();
   setInterval(updateClock, 30000);
+  renderReports();
+  updateStats();
 </script>
 
 </body>
