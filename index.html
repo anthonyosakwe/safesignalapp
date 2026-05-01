@@ -1271,52 +1271,6 @@
 </head>
 <body>
 
-<!-- Tiny floating debug button — tap to see app state. Long-press to hide. -->
-<button id="debug-btn"
-  onclick="showDebugInfo()"
-  oncontextmenu="document.getElementById('debug-btn').style.display='none';return false;"
-  style="position:fixed;bottom:12px;right:12px;z-index:9999;width:36px;height:36px;border-radius:50%;border:1px solid rgba(217,79,58,0.3);background:rgba(14,26,43,0.85);color:#fff;font-size:14px;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 4px 12px rgba(0,0,0,0.2);"
-  aria-label="Debug info">🔍</button>
-
-<script>
-  function showDebugInfo() {
-    const lines = [];
-    lines.push('=== SAFESIGNAL DEBUG ===');
-    lines.push('');
-    lines.push('SDK loaded: ' + (typeof window.supabase !== 'undefined' ? 'YES' : 'NO'));
-    if (typeof window.supabase !== 'undefined') {
-      lines.push('createClient fn: ' + (typeof window.supabase.createClient === 'function' ? 'YES' : 'NO'));
-      // Check if it's our stub by calling it
-      try {
-        const test = window.supabase.createClient('', '');
-        lines.push('Client type: ' + (test === null ? 'STUB (CDN failed)' : 'REAL'));
-      } catch(e) { lines.push('Client check error: ' + e.message); }
-    }
-    lines.push('');
-    lines.push('App state:');
-    lines.push('• supabase var: ' + (typeof supabase === 'undefined' ? 'undefined' : (supabase === null ? 'null' : 'CONNECTED')));
-    lines.push('• reports in memory: ' + (typeof reports !== 'undefined' ? reports.length : 'unknown'));
-    lines.push('• audio cached: ' + (typeof audioCache !== 'undefined' ? Object.keys(audioCache).length : 'unknown'));
-    lines.push('');
-    lines.push('Last submit: ' + (window._lastSubmitResult || 'no submit yet'));
-    lines.push('Last error: ' + (window._lastError || 'none'));
-    lines.push('');
-    lines.push('URL: ' + location.href);
-    lines.push('Online: ' + navigator.onLine);
-    alert(lines.join('\n'));
-  }
-  // Capture errors for the diagnostic
-  window.addEventListener('error', e => {
-    if (e.message && e.message !== 'Script error.') {
-      window._lastError = e.message.slice(0, 100);
-    }
-  });
-  window.addEventListener('unhandledrejection', e => {
-    const msg = (e.reason && (e.reason.message || e.reason.toString())) || 'promise rejection';
-    window._lastError = msg.slice(0, 100);
-  });
-</script>
-
 <div class="page-header">
   <span class="badge"><span class="dot"></span> Live prototype · MVP demo</span>
   <h1>SafeSignal — report safely, <em>in seconds</em>.</h1>
@@ -1612,19 +1566,10 @@
   </div>
 </div>
 
-<!-- Supabase SDK from Cloudflare CDN. Cloudflare has Nigerian edge servers -->
-<!-- and is the most reliably accessible CDN on MTN/Glo/9mobile networks. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.7/supabase.min.js"></script>
-<script>
-  // Defensive guard: if the CDN script failed to load for any reason,
-  // create a stub so the rest of the page's inline onclick handlers don't
-  // crash with "supabase is not defined" errors. The app degrades gracefully
-  // to local-only mode instead of breaking every button on the page.
-  if (typeof window.supabase === 'undefined') {
-    console.warn('Supabase SDK did not load — running in local-only mode');
-    window.supabase = { createClient: () => null };
-  }
-</script>
+<!-- Supabase SDK loaded from same-origin (GitHub Pages) for reliability. -->
+<!-- This avoids CDN-blocking issues common on Nigerian mobile networks (MTN, Glo, etc). -->
+<!-- The supabase.js file lives in the same repo directory as this HTML file. -->
+<script src="supabase.js"></script>
 
 <script>
   // ============ SUPABASE INITIALIZATION ============
@@ -1923,25 +1868,6 @@
     addrEl.textContent = 'Requesting GPS permission';
     tsEl.textContent = 'Waiting for device location';
 
-    // Pre-flight permission check — if previously denied, tell the user immediately
-    // instead of silently waiting. (Permissions API isn't on iOS Safari, hence the guard.)
-    if (navigator.permissions && navigator.permissions.query) {
-      navigator.permissions.query({ name: 'geolocation' }).then(perm => {
-        if (perm.state === 'denied') {
-          card.classList.remove('loading', 'success');
-          card.classList.add('error');
-          titleEl.textContent = 'Location permission blocked';
-          addrEl.textContent = 'Tap the 🔒 icon in your address bar → Permissions → Location → Allow';
-          tsEl.textContent = 'Or enter location manually below';
-          capturedLocation = null;
-          showManualLocation();
-        }
-      }).catch(() => { /* ignore — permissions API not supported */ });
-    }
-
-    // enableHighAccuracy: false uses cell-tower triangulation when GPS is slow.
-    // Less precise (~100m vs ~10m) but on Nigerian networks indoors, getting ANY
-    // location in 3 seconds beats waiting 30+ seconds for a precise GPS lock.
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const lat = pos.coords.latitude;
@@ -1954,50 +1880,38 @@
         const lngStr = `${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
         const coordsLine = `${latStr}, ${lngStr}`;
 
-        // STAGE 1: Show coordinates immediately. Don't make the user wait
-        // on the slow Nominatim reverse-geocoding fetch — give them feedback NOW.
-        capturedLocation = {
-          lat, lng, accuracy,
-          place: 'Resolving address…',
-          coords: coordsLine,
-          time: timestamp,
-        };
-        card.classList.remove('loading', 'error');
-        card.classList.add('success');
-        titleEl.textContent = 'Location captured';
-        addrEl.textContent = `${coordsLine} · resolving address…`;
-        tsEl.textContent = `${formatRelativeTime(timestamp)} · accuracy ±${accuracy}m`;
-
-        // STAGE 2: Try reverse geocoding via OpenStreetMap Nominatim with a
-        // strict 5-second timeout. If it succeeds, upgrade the display.
-        // If it fails or times out, the user already has a usable location.
+        // Try reverse geocoding via OpenStreetMap Nominatim (free, no API key)
+        let placeName = 'Locating address…';
         try {
-          const controller = new AbortController();
-          const tid = setTimeout(() => controller.abort(), 5000);
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`,
-            { headers: { 'Accept-Language': 'en' }, signal: controller.signal }
+            { headers: { 'Accept-Language': 'en' } }
           );
-          clearTimeout(tid);
           if (res.ok) {
             const data = await res.json();
             const a = data.address || {};
             const locality = a.suburb || a.neighbourhood || a.village || a.town || a.city_district || a.city || '';
             const region = a.state || a.region || a.country || '';
-            const placeName = [locality, region].filter(Boolean).join(', ') || data.display_name || '';
-            if (placeName) {
-              capturedLocation.place = placeName;
-              addrEl.textContent = `${placeName} · ${coordsLine}`;
-            }
+            placeName = [locality, region].filter(Boolean).join(', ') || data.display_name || 'Unknown area';
+          } else {
+            placeName = 'Address lookup unavailable';
           }
         } catch (e) {
-          // Geocoder failed or timed out — stay on coordinates-only.
-          // Update the display so user knows we tried but moved on.
-          if (capturedLocation && capturedLocation.place === 'Resolving address…') {
-            capturedLocation.place = 'Location not captured';
-            addrEl.textContent = coordsLine;
-          }
+          placeName = 'Offline · using coordinates only';
         }
+
+        capturedLocation = {
+          lat, lng, accuracy,
+          place: placeName,
+          coords: coordsLine,
+          time: timestamp,
+        };
+
+        card.classList.remove('loading', 'error');
+        card.classList.add('success');
+        titleEl.textContent = 'Location captured';
+        addrEl.textContent = `${placeName} · ${coordsLine}`;
+        tsEl.textContent = `${formatRelativeTime(timestamp)} · accuracy ±${accuracy}m`;
       },
       (err) => {
         card.classList.remove('loading', 'success');
@@ -2010,10 +1924,10 @@
 
         if (isInsecure) {
           msg = 'GPS needs a secure connection';
-          sub = 'Open via https:// — or enter manually below';
+          sub = 'Open via https:// (deploy to Netlify) — or enter manually below';
         } else if (err.code === err.PERMISSION_DENIED) {
           msg = 'Location permission denied';
-          sub = 'Tap the 🔒 in address bar → Permissions → Location → Allow';
+          sub = 'Enable in browser settings, or enter manually below';
         } else if (err.code === err.POSITION_UNAVAILABLE) {
           msg = 'GPS signal unavailable';
           sub = 'Move to an open area or enter manually below';
@@ -2028,10 +1942,7 @@
         // Show manual entry option
         showManualLocation();
       },
-      // Faster fallback config: cell-tower triangulation, 8s timeout,
-      // accept cached position up to 60s old (saves a fresh GPS lock entirely
-      // if the device located itself recently).
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
     );
   }
 
@@ -2302,27 +2213,21 @@
         const { error } = await supabase.from('reports').insert([reportForDB]);
         if (error) {
           console.error('Supabase insert error:', error);
-          window._lastSubmitResult = 'FAILED: ' + (error.message || error.code || 'unknown').slice(0, 60);
-          window._lastError = error.message || error.code || 'insert failed';
           // Insert failed — fall back to local-only so the demo still works
           insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
         } else {
           console.log('✓ Report submitted to Supabase');
-          window._lastSubmitResult = 'SUCCESS: ' + refId + ' → Supabase';
           // Stash the audio in a side-cache so the modal can play it back
           // even though we don't keep base64 in the in-memory reports list.
           if (audioBase64) audioCache[refId] = audioBase64;
         }
       } catch (err) {
         console.error('Supabase insert threw:', err);
-        window._lastSubmitResult = 'THREW: ' + (err.message || 'unknown').slice(0, 60);
-        window._lastError = err.message || 'insert threw';
         insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
       }
     } else {
       // Supabase not initialized (offline or CDN failed) — local-only
       console.warn('Supabase not initialized — inserting locally only.');
-      window._lastSubmitResult = 'LOCAL ONLY: supabase var is ' + (supabase === null ? 'null' : typeof supabase);
       insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
     }
 
