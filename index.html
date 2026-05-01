@@ -1210,6 +1210,92 @@
     opacity: 0.9;
   }
   .evidence-tile svg { opacity: 0.9; }
+
+  /* ====== DIAGNOSTIC PANEL (debugging deployment) ====== */
+  #diag-panel {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 9999;
+    background: rgba(14, 26, 43, 0.95);
+    color: #fff;
+    border-radius: 12px;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 11px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    max-width: 320px;
+    backdrop-filter: blur(8px);
+  }
+  #diag-panel .diag-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  #diag-panel .diag-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #d94f3a;
+    box-shadow: 0 0 8px rgba(217,79,58,0.6);
+  }
+  #diag-panel.ok .diag-dot {
+    background: #2f6b4d;
+    box-shadow: 0 0 8px rgba(47,107,77,0.6);
+  }
+  #diag-panel.warn .diag-dot {
+    background: #c98a16;
+    box-shadow: 0 0 8px rgba(201,138,22,0.6);
+  }
+  #diag-panel .diag-title {
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  #diag-panel .diag-arrow {
+    margin-left: auto;
+    opacity: 0.6;
+    transition: transform 0.2s;
+  }
+  #diag-panel.expanded .diag-arrow {
+    transform: rotate(90deg);
+  }
+  #diag-panel .diag-body {
+    display: none;
+    padding: 0 12px 12px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    margin-top: 4px;
+  }
+  #diag-panel.expanded .diag-body {
+    display: block;
+  }
+  #diag-panel .diag-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    gap: 12px;
+  }
+  #diag-panel .diag-row:last-child { border-bottom: none; }
+  #diag-panel .diag-key { color: rgba(255,255,255,0.6); }
+  #diag-panel .diag-val {
+    text-align: right;
+    color: #fff;
+    word-break: break-word;
+    max-width: 200px;
+  }
+  #diag-panel .diag-val.good { color: #6fce9d; }
+  #diag-panel .diag-val.bad { color: #ff8d7a; }
+  #diag-panel .diag-val.warn-c { color: #ffce6b; }
+  #diag-panel .diag-close {
+    margin-left: 8px;
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.6);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 4px;
+  }
   .map-preview {
     margin-top: 8px;
     height: 140px;
@@ -1270,6 +1356,73 @@
 </style>
 </head>
 <body>
+
+<!-- DIAGNOSTIC PANEL — remove for production -->
+<div id="diag-panel">
+  <div class="diag-head" onclick="toggleDiag()">
+    <span class="diag-dot"></span>
+    <span class="diag-title" id="diag-title">Diagnostics: starting…</span>
+    <span class="diag-arrow">›</span>
+    <button class="diag-close" onclick="event.stopPropagation();document.getElementById('diag-panel').style.display='none'" aria-label="Close">×</button>
+  </div>
+  <div class="diag-body">
+    <div class="diag-row"><span class="diag-key">SDK script</span><span class="diag-val" id="diag-sdk">checking…</span></div>
+    <div class="diag-row"><span class="diag-key">Client init</span><span class="diag-val" id="diag-client">waiting</span></div>
+    <div class="diag-row"><span class="diag-key">Realtime</span><span class="diag-val" id="diag-rt">waiting</span></div>
+    <div class="diag-row"><span class="diag-key">Initial load</span><span class="diag-val" id="diag-load">waiting</span></div>
+    <div class="diag-row"><span class="diag-key">Last submit</span><span class="diag-val" id="diag-submit">none yet</span></div>
+    <div class="diag-row"><span class="diag-key">Last error</span><span class="diag-val" id="diag-err">none</span></div>
+    <div class="diag-row"><span class="diag-key">Build</span><span class="diag-val" id="diag-build">v2-diag-2026-05-01</span></div>
+  </div>
+</div>
+<script>
+  function toggleDiag() {
+    document.getElementById('diag-panel').classList.toggle('expanded');
+  }
+  function setDiag(key, value, kind) {
+    const el = document.getElementById('diag-' + key);
+    if (!el) return;
+    el.textContent = value;
+    el.className = 'diag-val' + (kind ? ' ' + kind : '');
+    updateDiagOverall();
+  }
+  function updateDiagOverall() {
+    const panel = document.getElementById('diag-panel');
+    const title = document.getElementById('diag-title');
+    const sdk = document.getElementById('diag-sdk').textContent;
+    const client = document.getElementById('diag-client').textContent;
+    const err = document.getElementById('diag-err').textContent;
+    panel.classList.remove('ok','warn');
+    if (err !== 'none') {
+      panel.classList.add('warn');
+      title.textContent = 'Diagnostics: error — tap';
+    } else if (sdk.includes('loaded') && client.includes('init')) {
+      panel.classList.add('ok');
+      title.textContent = 'Diagnostics: ready';
+    } else {
+      title.textContent = 'Diagnostics: starting…';
+    }
+  }
+  // Capture global errors so they show up in the panel
+  window.addEventListener('error', (e) => {
+    setDiag('err', (e.message || 'unknown').slice(0, 80), 'bad');
+    document.getElementById('diag-panel').classList.add('expanded');
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const msg = (e.reason && (e.reason.message || e.reason.toString())) || 'unknown promise rejection';
+    setDiag('err', msg.slice(0, 80), 'bad');
+    document.getElementById('diag-panel').classList.add('expanded');
+  });
+  // Run an immediate SDK check after a short delay (CDN is async)
+  setTimeout(() => {
+    if (window.supabase) {
+      setDiag('sdk', 'loaded ✓', 'good');
+    } else {
+      setDiag('sdk', 'NOT loaded ✗', 'bad');
+      document.getElementById('diag-panel').classList.add('expanded');
+    }
+  }, 1500);
+</script>
 
 <div class="page-header">
   <span class="badge"><span class="dot"></span> Live prototype · MVP demo</span>
@@ -1585,9 +1738,20 @@
   
   async function initializeSupabase() {
     if (window.supabase && !supabase) {
-      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      console.log('✓ Supabase initialized');
-      loadReportsFromSupabase();
+      try {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('✓ Supabase initialized');
+        if (typeof setDiag === 'function') setDiag('client', 'initialized ✓', 'good');
+        loadReportsFromSupabase();
+      } catch (e) {
+        if (typeof setDiag === 'function') {
+          setDiag('client', 'init failed ✗', 'bad');
+          setDiag('err', (e.message || 'init error').slice(0, 80), 'bad');
+        }
+        console.error('Supabase init error:', e);
+      }
+    } else if (!window.supabase) {
+      if (typeof setDiag === 'function') setDiag('client', 'SDK missing ✗', 'bad');
     }
   }
   
@@ -1627,11 +1791,18 @@
         reports = [...converted, ...reports.filter(r => !realIds.has(r.id))];
         renderReports();
         updateStats();
+        if (typeof setDiag === 'function') setDiag('load', `loaded ${data.length} ✓`, 'good');
+      } else {
+        if (typeof setDiag === 'function') setDiag('load', '0 rows (empty table)', 'warn-c');
       }
       
       setupRealtimeListener();
     } catch (err) {
       console.error('Load reports error:', err);
+      if (typeof setDiag === 'function') {
+        setDiag('load', 'failed ✗', 'bad');
+        setDiag('err', (err.message || 'load error').slice(0, 80), 'bad');
+      }
       // Even on error, still try to wire up realtime so future inserts work
       setupRealtimeListener();
     }
@@ -1654,8 +1825,11 @@
   
   function setupRealtimeListener() {
     try {
-      if (!supabase) return;
-      supabase
+      if (!supabase) {
+        if (typeof setDiag === 'function') setDiag('rt', 'no client', 'bad');
+        return;
+      }
+      const channel = supabase
         .channel('reports_changes')
         .on('postgres_changes', 
           { event: '*', schema: 'public', table: 'reports' },
@@ -1702,10 +1876,21 @@
               }
             }
           })
-        .subscribe();
+        .subscribe((status) => {
+          if (typeof setDiag === 'function') {
+            if (status === 'SUBSCRIBED') setDiag('rt', 'subscribed ✓', 'good');
+            else if (status === 'CHANNEL_ERROR') setDiag('rt', 'channel error', 'bad');
+            else if (status === 'TIMED_OUT') setDiag('rt', 'timed out', 'warn-c');
+            else setDiag('rt', status.toLowerCase(), 'warn-c');
+          }
+        });
       console.log('✓ Realtime subscription active');
     } catch (err) {
       console.error('Realtime setup error:', err);
+      if (typeof setDiag === 'function') {
+        setDiag('rt', 'setup error', 'bad');
+        setDiag('err', (err.message || 'rt error').slice(0, 80), 'bad');
+      }
     }
   }
 
@@ -2207,24 +2392,40 @@
     // local insert needed (prevents duplicate rows).
     if (supabase) {
       try {
+        if (typeof setDiag === 'function') setDiag('submit', 'sending…', 'warn-c');
         const { error } = await supabase.from('reports').insert([reportForDB]);
         if (error) {
           console.error('Supabase insert error:', error);
+          if (typeof setDiag === 'function') {
+            setDiag('submit', 'failed ✗', 'bad');
+            setDiag('err', (error.message || error.code || 'insert error').slice(0, 80), 'bad');
+            document.getElementById('diag-panel').classList.add('expanded');
+          }
           // Insert failed — fall back to local-only so the demo still works
           insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
         } else {
           console.log('✓ Report submitted to Supabase');
+          if (typeof setDiag === 'function') setDiag('submit', `${refId} ✓`, 'good');
           // Stash the audio in a side-cache so the modal can play it back
           // even though we don't keep base64 in the in-memory reports list.
           if (audioBase64) audioCache[refId] = audioBase64;
         }
       } catch (err) {
         console.error('Supabase insert threw:', err);
+        if (typeof setDiag === 'function') {
+          setDiag('submit', 'threw ✗', 'bad');
+          setDiag('err', (err.message || 'insert threw').slice(0, 80), 'bad');
+          document.getElementById('diag-panel').classList.add('expanded');
+        }
         insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
       }
     } else {
       // Supabase not initialized (offline or CDN failed) — local-only
       console.warn('Supabase not initialized — inserting locally only.');
+      if (typeof setDiag === 'function') {
+        setDiag('submit', 'local only (no client)', 'warn-c');
+        setDiag('err', 'Supabase client never initialized', 'bad');
+      }
       insertReportLocally(refId, typeMap, mediaCount, locationLabel, coordsLabel, audioBase64);
     }
 
