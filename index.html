@@ -1877,6 +1877,25 @@
     addrEl.textContent = 'Requesting GPS permission';
     tsEl.textContent = 'Waiting for device location';
 
+    // Pre-flight permission check — if previously denied, tell the user immediately
+    // instead of silently waiting. (Permissions API isn't on iOS Safari, hence the guard.)
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then(perm => {
+        if (perm.state === 'denied') {
+          card.classList.remove('loading', 'success');
+          card.classList.add('error');
+          titleEl.textContent = 'Location permission blocked';
+          addrEl.textContent = 'Tap the 🔒 icon in your address bar → Permissions → Location → Allow';
+          tsEl.textContent = 'Or enter location manually below';
+          capturedLocation = null;
+          showManualLocation();
+        }
+      }).catch(() => { /* ignore — permissions API not supported */ });
+    }
+
+    // enableHighAccuracy: false uses cell-tower triangulation when GPS is slow.
+    // Less precise (~100m vs ~10m) but on Nigerian networks indoors, getting ANY
+    // location in 3 seconds beats waiting 30+ seconds for a precise GPS lock.
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const lat = pos.coords.latitude;
@@ -1889,38 +1908,50 @@
         const lngStr = `${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
         const coordsLine = `${latStr}, ${lngStr}`;
 
-        // Try reverse geocoding via OpenStreetMap Nominatim (free, no API key)
-        let placeName = 'Locating address…';
+        // STAGE 1: Show coordinates immediately. Don't make the user wait
+        // on the slow Nominatim reverse-geocoding fetch — give them feedback NOW.
+        capturedLocation = {
+          lat, lng, accuracy,
+          place: 'Resolving address…',
+          coords: coordsLine,
+          time: timestamp,
+        };
+        card.classList.remove('loading', 'error');
+        card.classList.add('success');
+        titleEl.textContent = 'Location captured';
+        addrEl.textContent = `${coordsLine} · resolving address…`;
+        tsEl.textContent = `${formatRelativeTime(timestamp)} · accuracy ±${accuracy}m`;
+
+        // STAGE 2: Try reverse geocoding via OpenStreetMap Nominatim with a
+        // strict 5-second timeout. If it succeeds, upgrade the display.
+        // If it fails or times out, the user already has a usable location.
         try {
+          const controller = new AbortController();
+          const tid = setTimeout(() => controller.abort(), 5000);
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`,
-            { headers: { 'Accept-Language': 'en' } }
+            { headers: { 'Accept-Language': 'en' }, signal: controller.signal }
           );
+          clearTimeout(tid);
           if (res.ok) {
             const data = await res.json();
             const a = data.address || {};
             const locality = a.suburb || a.neighbourhood || a.village || a.town || a.city_district || a.city || '';
             const region = a.state || a.region || a.country || '';
-            placeName = [locality, region].filter(Boolean).join(', ') || data.display_name || 'Unknown area';
-          } else {
-            placeName = 'Address lookup unavailable';
+            const placeName = [locality, region].filter(Boolean).join(', ') || data.display_name || '';
+            if (placeName) {
+              capturedLocation.place = placeName;
+              addrEl.textContent = `${placeName} · ${coordsLine}`;
+            }
           }
         } catch (e) {
-          placeName = 'Offline · using coordinates only';
+          // Geocoder failed or timed out — stay on coordinates-only.
+          // Update the display so user knows we tried but moved on.
+          if (capturedLocation && capturedLocation.place === 'Resolving address…') {
+            capturedLocation.place = 'Location not captured';
+            addrEl.textContent = coordsLine;
+          }
         }
-
-        capturedLocation = {
-          lat, lng, accuracy,
-          place: placeName,
-          coords: coordsLine,
-          time: timestamp,
-        };
-
-        card.classList.remove('loading', 'error');
-        card.classList.add('success');
-        titleEl.textContent = 'Location captured';
-        addrEl.textContent = `${placeName} · ${coordsLine}`;
-        tsEl.textContent = `${formatRelativeTime(timestamp)} · accuracy ±${accuracy}m`;
       },
       (err) => {
         card.classList.remove('loading', 'success');
@@ -1933,10 +1964,10 @@
 
         if (isInsecure) {
           msg = 'GPS needs a secure connection';
-          sub = 'Open via https:// (deploy to Netlify) — or enter manually below';
+          sub = 'Open via https:// — or enter manually below';
         } else if (err.code === err.PERMISSION_DENIED) {
           msg = 'Location permission denied';
-          sub = 'Enable in browser settings, or enter manually below';
+          sub = 'Tap the 🔒 in address bar → Permissions → Location → Allow';
         } else if (err.code === err.POSITION_UNAVAILABLE) {
           msg = 'GPS signal unavailable';
           sub = 'Move to an open area or enter manually below';
@@ -1951,7 +1982,10 @@
         // Show manual entry option
         showManualLocation();
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+      // Faster fallback config: cell-tower triangulation, 8s timeout,
+      // accept cached position up to 60s old (saves a fresh GPS lock entirely
+      // if the device located itself recently).
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
     );
   }
 
