@@ -1566,10 +1566,19 @@
   </div>
 </div>
 
-<!-- Supabase SDK loaded from same-origin (GitHub Pages) for reliability. -->
-<!-- This avoids CDN-blocking issues common on Nigerian mobile networks (MTN, Glo, etc). -->
-<!-- The supabase.js file lives in the same repo directory as this HTML file. -->
-<script src="supabase.js"></script>
+<!-- Supabase SDK from Cloudflare CDN. Cloudflare has Nigerian edge servers -->
+<!-- and is the most reliably accessible CDN on MTN/Glo/9mobile networks. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.7/supabase.min.js"></script>
+<script>
+  // Defensive guard: if the CDN script failed to load for any reason,
+  // create a stub so the rest of the page's inline onclick handlers don't
+  // crash with "supabase is not defined" errors. The app degrades gracefully
+  // to local-only mode instead of breaking every button on the page.
+  if (typeof window.supabase === 'undefined') {
+    console.warn('Supabase SDK did not load — running in local-only mode');
+    window.supabase = { createClient: () => null };
+  }
+</script>
 
 <script>
   // ============ SUPABASE INITIALIZATION ============
